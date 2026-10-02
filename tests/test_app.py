@@ -108,3 +108,26 @@ def test_webhook_photo_tagging_applies_alt_and_rename(monkeypatch):
     # A second update for the same product must not re-process the same photo.
     app_module._handle_product_event("update", 11)
     assert len(alts) == 1
+
+
+def test_late_event_for_deleted_product_is_ignored(monkeypatch):
+    store.add_pending(77, {"title": "Gone Dress", "handle": "gone-dress", "seo_title": "T", "seo_desc": "D"})
+    monkeypatch.setattr(app_module.sh, "get_product", lambda pid: None)
+    called = []
+    monkeypatch.setattr(app_module, "_generate_for", lambda p: called.append(p))
+    app_module._handle_product_event("update", 77)
+    assert called == [] and not store.is_pending(77)
+
+
+def test_empty_copy_is_not_queued(monkeypatch):
+    product = {"id": 78, "gid": "gid://shopify/Product/78", "title": "Blank Dress in Silk", "handle": "blank-dress-ivory",
+               "tags": "Dresses", "status": "active", "created_at": "2026-10-02T00:00:00Z",
+               "body_html": "<p>A long enough description of a silk dress made in Italy for the test to proceed.</p>",
+               "seo": {"title_tag": "", "description_tag": ""}}
+    monkeypatch.setattr(app_module.sh, "get_product", lambda pid: dict(product))
+    monkeypatch.setattr(app_module.sh, "get_product_images", lambda pid: [])
+    monkeypatch.setattr(app_module, "_load_all", lambda force=False: [])
+    monkeypatch.setattr(app_module, "_generate_for", lambda p: {"title": "", "description": ""})
+    app_module._handle_product_event("create", 78)
+    assert not store.is_pending(78)
+    assert any(e["event"] == "error" and e.get("product_id") == 78 for e in store.get_activity())

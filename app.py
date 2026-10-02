@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import threading
+import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from flask import Flask, Response, abort, jsonify, render_template, request
@@ -400,11 +401,18 @@ def webhook_products(action: str):
 def _handle_product_event(action: str, product_id: int) -> None:
     try:
         product = sh.get_product(product_id)
-        if not product:
+        if not product:                      # deleted (Shopify can deliver late events after a delete)
+            store.remove_pending([product_id])
             return
         _upsert_cached(product)
         _maybe_queue_seo(product, action)
-        _process_photos(product, recent_only=(action == "update"))
+        try:
+            _process_photos(product, recent_only=(action == "update"))
+        except requests.HTTPError as e:
+            if e.response is not None and e.response.status_code == 404:
+                store.remove_pending([product_id])   # product vanished between the two calls
+                return
+            raise
     except Exception as e:
         logger.exception("Webhook handling failed for product %s", product_id)
         store.log("error", product_id=product_id, where=f"webhook products/{action}", error=str(e))
@@ -421,6 +429,10 @@ def _maybe_queue_seo(product: dict, action: str) -> None:
                       reason="Will generate once the product has a title and a description")
         return
     seo = _generate_for(product)
+    if not seo.get("title") or not seo.get("description"):
+        store.log("error", product_id=product["id"], title=product["title"], where="seo generation",
+                  error="Model returned empty copy; nothing queued. Use Generate in the SEO tab to retry.")
+        return
     store.add_pending(product["id"], {
         "title": product["title"], "handle": product["handle"], "status": product["status"],
         "seo_title": seo["title"], "seo_desc": seo["description"], "source": f"webhook products/{action}",
