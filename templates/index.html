@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Aflalo SEO Writer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f5; color: #1a1a1a; }
+    header { background: #1a1a1a; color: #fff; padding: 18px 32px; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 18px; font-weight: 500; letter-spacing: 0.04em; }
+    .header-right { display: flex; align-items: center; gap: 20px; }
+    header span.reload-btn { font-size: 13px; opacity: 0.5; cursor: pointer; }
+    .mode-switcher { display: flex; gap: 3px; background: #333; border-radius: 6px; padding: 3px; }
+    .mode-btn { background: transparent; color: #aaa; border: none; padding: 5px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; font-family: inherit; }
+    .mode-btn.active { background: #fff; color: #1a1a1a; font-weight: 500; }
+    .mode-btn:hover:not(.active) { color: #fff; }
+    .mode-btn .pill { display: inline-block; background: #e53e3e; color: #fff; border-radius: 10px; font-size: 10px; padding: 1px 6px; margin-left: 5px; }
+    .mode-btn .pill.zero { display: none; }
+    .tabs { display: flex; background: #fff; border-bottom: 1px solid #e0e0e0; padding: 0 32px; overflow-x: auto; }
+    .tab { padding: 14px 20px; cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; white-space: nowrap; color: #666; }
+    .tab:hover { color: #1a1a1a; }
+    .tab.active { color: #1a1a1a; border-bottom-color: #1a1a1a; font-weight: 500; }
+    .tab .badge { display: inline-block; background: #f0e9ff; color: #6b2fff; font-size: 11px; padding: 2px 6px; border-radius: 10px; margin-left: 6px; }
+    .tab .badge.zero, .tab .badge.unknown { background: #eee; color: #999; }
+    .panel { display: none; padding: 24px 32px; }
+    .panel.active { display: block; }
+    .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
+    .panel-header h2 { font-size: 15px; font-weight: 500; text-transform: capitalize; }
+    .panel-header .sub { font-size: 13px; color: #999; font-weight: 400; text-transform: none; }
+    .panel-header .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    button { cursor: pointer; border: none; border-radius: 6px; font-size: 13px; padding: 8px 16px; font-family: inherit; }
+    .btn-secondary { background: #fff; color: #1a1a1a; border: 1px solid #ddd; }
+    .btn-secondary:hover { background: #f5f5f5; }
+    .btn-publish { background: #1a7a4a; color: #fff; }
+    .btn-publish:hover { background: #15633c; }
+    .btn-danger { background: #fff; color: #c53030; border: 1px solid #f3c4c4; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+    thead { background: #fafafa; }
+    th { padding: 12px 16px; text-align: left; font-size: 12px; font-weight: 500; color: #666; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid #eee; }
+    td { padding: 14px 16px; border-bottom: 1px solid #f0f0f0; vertical-align: top; font-size: 13px; }
+    tr:last-child td { border-bottom: none; }
+    tr.done { background: #fafff8; }
+    tr.generated { background: #fffbf0; }
+    .product-name { font-weight: 500; }
+    .product-handle { font-size: 11px; color: #999; margin-top: 2px; }
+    .seo-field { width: 100%; border: 1px solid #e0e0e0; border-radius: 5px; padding: 7px 10px; font-size: 13px; font-family: inherit; resize: vertical; }
+    .seo-field:focus { outline: none; border-color: #999; }
+    .char-count { font-size: 11px; margin-top: 3px; color: #999; }
+    .char-count.over { color: #e53e3e; }
+    .status-badge { display: inline-block; font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: 500; white-space: nowrap; }
+    .status-missing { background: #fff0f0; color: #c53030; }
+    .status-ok { background: #f0fff4; color: #276749; }
+    .status-generated { background: #fffbf0; color: #b7791f; }
+    .status-pending { background: #f0e9ff; color: #6b2fff; }
+    .approve-check { width: 16px; height: 16px; cursor: pointer; }
+    .generate-btn { background: #f5f0ff; color: #6b2fff; border: 1px solid #d9c9ff; padding: 5px 10px; font-size: 12px; border-radius: 5px; }
+    .generate-btn:hover { background: #ede4ff; }
+    .img-thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 4px; display: block; background: #f0f0f0; }
+    .img-pos { font-size: 11px; color: #bbb; margin-top: 3px; text-align: center; }
+    .mono { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #666; word-break: break-all; }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #ccc; border-top-color: #666; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-state { padding: 60px; text-align: center; color: #999; font-size: 14px; }
+    .select-all-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; color: #666; }
+    .toast { position: fixed; bottom: 24px; right: 24px; background: #1a1a1a; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; max-width: 480px; }
+    .toast.show { opacity: 1; }
+    .toast.error { background: #c53030; }
+    .empty { color: #276749; font-size: 14px; padding: 20px 0; }
+    .check-list { list-style: none; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); margin-bottom: 24px; }
+    .check-list li { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; font-size: 13px; display: flex; gap: 12px; align-items: flex-start; }
+    .check-list li:last-child { border-bottom: none; }
+    .check-list .ok { color: #276749; font-weight: 600; }
+    .check-list .bad { color: #c53030; font-weight: 600; }
+    .check-list .hint { color: #888; font-size: 12px; margin-top: 3px; }
+    .setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 1000px) { .setup-grid { grid-template-columns: 1fr; } }
+    input.text { border: 1px solid #ddd; border-radius: 6px; padding: 7px 10px; font-size: 13px; font-family: inherit; width: 320px; }
+    .event { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+    .event.error { color: #c53030; }
+    .event.seo_generated, .event.photo_tagged, .event.seo_published { color: #276749; }
+    .event.seo_waiting, .event.photos_waiting { color: #b7791f; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Aflalo SEO Writer</h1>
+  <div class="header-right">
+    <div class="mode-switcher">
+      <button class="mode-btn active" id="mode-btn-seo" onclick="switchMode('seo')">SEO</button>
+      <button class="mode-btn" id="mode-btn-photos" onclick="switchMode('photos')">Photos</button>
+      <button class="mode-btn" id="mode-btn-pending" onclick="switchMode('pending')">Approval queue <span class="pill {% if not pending_count %}zero{% endif %}" id="pending-pill">{{ pending_count }}</span></button>
+      <button class="mode-btn" id="mode-btn-setup" onclick="switchMode('setup')">Setup &amp; activity</button>
+    </div>
+    <span class="reload-btn" onclick="reloadProducts()">&#8635; Reload products</span>
+  </div>
+</header>
+
+<div class="tabs" id="tabs">
+  {% for cat in categories %}
+  <div class="tab {% if loop.first %}active{% endif %}" id="tab-{{ cat }}" onclick="switchTab('{{ cat }}')">
+    {{ cat|title }}
+    <span class="badge unknown" id="badge-{{ cat }}">{{ stats[cat].total }}</span>
+  </div>
+  {% endfor %}
+</div>
+
+{% for cat in categories %}
+<div class="panel {% if loop.first %}active{% endif %}" id="panel-seo-{{ cat }}"><div class="loading-state"><span class="spinner"></span> Loading {{ cat }}...</div></div>
+<div class="panel" id="panel-photos-{{ cat }}"><div class="loading-state"><span class="spinner"></span> Loading {{ cat }} photos...</div></div>
+{% endfor %}
+<div class="panel" id="panel-pending"><div class="loading-state"><span class="spinner"></span> Loading queue...</div></div>
+<div class="panel" id="panel-setup"><div class="loading-state"><span class="spinner"></span> Checking setup...</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CATEGORIES = {{ categories|tojson }};
+let currentMode = 'seo';
+let currentCat = CATEGORIES[0];
+const loaded = { seo: new Set(), photos: new Set() };
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = id => document.getElementById(id);
+
+function showToast(msg, isError = false) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  setTimeout(() => t.classList.remove('show'), isError ? 6000 : 3000);
+}
+function updateCharCount(el, countId, max) {
+  const len = el.value.length, c = $(countId);
+  c.textContent = len + '/' + max;
+  c.classList.toggle('over', len > max);
+}
+async function api(url, body) {
+  const resp = await fetch(url, body === undefined ? {} : { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || resp.statusText);
+  return data;
+}
+function busy(btn, label) {
+  const old = btn.innerHTML; btn.innerHTML = `<span class="spinner"></span>${label}`; btn.disabled = true;
+  return () => { btn.innerHTML = old; btn.disabled = false; };
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────────────
+function activePanelId() {
+  return (currentMode === 'seo' || currentMode === 'photos') ? `panel-${currentMode}-${currentCat}` : `panel-${currentMode}`;
+}
+function switchMode(mode) {
+  if (currentMode === mode) return;
+  $(activePanelId()).classList.remove('active');
+  currentMode = mode;
+  $(activePanelId()).classList.add('active');
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  $('mode-btn-' + mode).classList.add('active');
+  $('tabs').style.display = (mode === 'seo' || mode === 'photos') ? 'flex' : 'none';
+  loadCurrentPanel();
+}
+function switchTab(cat) {
+  $('tab-' + currentCat).classList.remove('active');
+  $(activePanelId()).classList.remove('active');
+  currentCat = cat;
+  $('tab-' + cat).classList.add('active');
+  $(activePanelId()).classList.add('active');
+  loadCurrentPanel();
+}
+function loadCurrentPanel() {
+  if (currentMode === 'seo') loadSeo(currentCat);
+  else if (currentMode === 'photos') loadPhotos(currentCat);
+  else if (currentMode === 'pending') loadPending();
+  else loadSetup();
+}
+function setBadge(cat, n) {
+  const b = $('badge-' + cat); b.textContent = n; b.className = 'badge' + (n === 0 ? ' zero' : '');
+}
+function setPendingPill(n) {
+  const p = $('pending-pill'); p.textContent = n; p.className = 'pill' + (n ? '' : ' zero');
+}
+
+// ── SEO ────────────────────────────────────────────────────────────────────────
+function seoRow(cat, p) {
+  const st = p.pending ? ['status-pending', 'In approval queue'] : ['status-missing', 'Missing'];
+  return `
+    <tr id="row-${p.id}">
+      <td><input type="checkbox" class="approve-check" data-cat="${cat}" data-id="${p.id}"></td>
+      <td><div class="product-name">${esc(p.title)}</div><div class="product-handle">${esc(p.handle)}</div></td>
+      <td><textarea class="seo-field" id="title-${p.id}" rows="2" oninput="updateCharCount(this,'title-count-${p.id}',60)">${esc(p.seo_title)}</textarea>
+          <div class="char-count" id="title-count-${p.id}">${p.seo_title.length}/60</div></td>
+      <td><textarea class="seo-field" id="desc-${p.id}" rows="3" oninput="updateCharCount(this,'desc-count-${p.id}',155)">${esc(p.seo_desc)}</textarea>
+          <div class="char-count" id="desc-count-${p.id}">${p.seo_desc.length}/155</div></td>
+      <td><span class="status-badge ${st[0]}" id="status-${p.id}">${st[1]}</span></td>
+      <td><button class="generate-btn" onclick="generateOne(event, ${p.id})">Generate</button></td>
+    </tr>`;
+}
+function renderSeo(cat, data) {
+  const panel = $('panel-seo-' + cat);
+  if (currentMode === 'seo') setBadge(cat, data.missing);
+  const missing = data.products.filter(p => !p.seo_title || !p.seo_desc);
+  if (!missing.length) { panel.innerHTML = '<p class="empty">Every product in this category has SEO copy.</p>'; return; }
+  panel.innerHTML = `
+    <div class="panel-header">
+      <h2>${esc(cat)} <span class="sub">${data.missing} missing SEO</span></h2>
+      <div class="actions">
+        <button class="btn-secondary generate-btn" onclick="generateCategory(event, '${cat}')">&#10024; Generate missing</button>
+        <button class="btn-publish" onclick="publishApproved(event, '${cat}')">Publish approved</button>
+      </div>
+    </div>
+    <div class="select-all-row"><input type="checkbox" id="select-all-${cat}" onchange="toggleAll('panel-seo-${cat}', '.approve-check', this.checked)"><label for="select-all-${cat}">Select all</label></div>
+    <table><thead><tr><th style="width:28px;"></th><th style="width:22%;">Product</th><th style="width:25%;">SEO Title <span style="font-weight:400;color:#aaa;">(max 60)</span></th><th>Meta Description <span style="font-weight:400;color:#aaa;">(max 155)</span></th><th style="width:110px;">Status</th><th style="width:80px;"></th></tr></thead>
+    <tbody>${missing.map(p => seoRow(cat, p)).join('')}</tbody></table>`;
+}
+async function loadSeo(cat) {
+  if (loaded.seo.has(cat)) return;
+  loaded.seo.add(cat);
+  try { renderSeo(cat, await api('/category/' + cat)); }
+  catch (e) { loaded.seo.delete(cat); $('panel-seo-' + cat).innerHTML = `<p style="color:#c53030;padding:20px 0;">Failed to load: ${esc(e.message)}</p>`; }
+}
+function setRowGenerated(id, seo) {
+  $('title-' + id).value = seo.title; $('desc-' + id).value = seo.description;
+  updateCharCount($('title-' + id), 'title-count-' + id, 60); updateCharCount($('desc-' + id), 'desc-count-' + id, 155);
+  $('row-' + id).className = 'generated';
+  const s = $('status-' + id); s.textContent = 'Generated'; s.className = 'status-badge status-generated';
+  $('row-' + id).querySelector('.approve-check').checked = true;
+}
+async function generateOne(ev, id) {
+  const done = busy(ev.currentTarget, '');
+  try { setRowGenerated(id, await api('/generate', {product_id: id})); showToast('Generated'); }
+  catch (e) { showToast('Error: ' + e.message, true); } finally { done(); }
+}
+async function generateCategory(ev, cat) {
+  const done = busy(ev.currentTarget, ' Generating...');
+  try {
+    const results = await api('/generate-category', {category: cat});
+    let n = 0;
+    for (const [id, seo] of Object.entries(results)) if (!seo.error && $('row-' + id)) { setRowGenerated(id, seo); n++; }
+    showToast(`Generated SEO for ${n} products`);
+  } catch (e) { showToast('Error: ' + e.message, true); } finally { done(); }
+}
+async function publishApproved(ev, cat) {
+  const panel = $('panel-seo-' + cat);
+  const checked = panel.querySelectorAll('.approve-check:checked');
+  if (!checked.length) { showToast('No products selected', true); return; }
+  const done = busy(ev.currentTarget, ' Publishing...');
+  const payload = Array.from(checked).map(cb => ({ product_id: cb.dataset.id, title: $('title-' + cb.dataset.id).value.trim(), description: $('desc-' + cb.dataset.id).value.trim() }));
+  try {
+    const data = await api('/publish', payload);
+    data.published.forEach(id => { const s = $('status-' + id); s.textContent = 'Published'; s.className = 'status-badge status-ok'; $('row-' + id).className = 'done'; $('row-' + id).querySelector('.approve-check').checked = false; });
+    showToast(`Published ${data.published.length} products${data.errors.length ? `, ${data.errors.length} failed: ${data.errors[0].error}` : ''}`, data.errors.length > 0);
+  } catch (e) { showToast('Error: ' + e.message, true); } finally { done(); }
+}
+function toggleAll(panelId, selector, checked) { $(panelId).querySelectorAll(selector).forEach(cb => cb.checked = checked); }
+
+// ── Photos (alt text + file names) ─────────────────────────────────────────────
+function photoRow(cat, p, img) {
+  const k = `${p.id}-${img.id}`;
+  return `
+    <tr id="prow-${k}" class="${img.needs_work ? '' : 'done'}">
+      <td><input type="checkbox" class="photo-check" data-product-id="${p.id}" data-image-id="${img.id}"></td>
+      <td><img class="img-thumb" src="${esc(img.src)}" loading="lazy" alt=""><div class="img-pos">#${img.position}</div></td>
+      <td><div class="product-name">${esc(p.title)}</div><div class="product-handle">${esc(p.handle)}${p.color ? ' &middot; ' + esc(p.color) : ''}</div>
+          <div class="mono" style="margin-top:8px;" title="current file name">${esc(img.filename)}</div></td>
+      <td><input class="seo-field mono" style="font-size:12px;color:#1a1a1a;" id="fn-${k}" value="${esc(img.filename)}"></td>
+      <td><textarea class="seo-field" id="alt-${k}" rows="2" oninput="updateCharCount(this,'alt-count-${k}',125)">${esc(img.alt)}</textarea>
+          <div class="char-count" id="alt-count-${k}">${img.alt.length}/125</div></td>
+      <td><span class="status-badge ${img.needs_work ? 'status-missing' : 'status-ok'}" id="pstatus-${k}">${img.needs_work ? 'Needs tagging' : 'Tagged'}</span></td>
+      <td><button class="generate-btn" onclick="proposeOne(event, ${p.id}, ${img.id})">Generate</button></td>
+    </tr>`;
+}
+function renderPhotos(cat, data, showAll = false) {
+  const panel = $('panel-photos-' + cat);
+  if (currentMode === 'photos') setBadge(cat, data.missing);
+  const rows = [];
+  for (const p of data.products) for (const img of p.images) if (showAll || img.needs_work) rows.push(photoRow(cat, p, img));
+  panel._data = data;
+  if (!rows.length) { panel.innerHTML = `<p class="empty">Every photo in this category is tagged and named to standard. <a href="#" onclick="renderPhotos('${cat}', document.getElementById('panel-photos-${cat}')._data, true); return false;">Show all</a></p>`; return; }
+  panel.innerHTML = `
+    <div class="panel-header">
+      <h2>${esc(cat)} photos <span class="sub">${data.missing} need alt text or a standard file name &middot; <a href="#" onclick="renderPhotos('${cat}', document.getElementById('panel-photos-${cat}')._data, ${!showAll}); return false;">${showAll ? 'show only untagged' : 'show all'}</a></span></h2>
+      <div class="actions">
+        <label style="font-size:13px;color:#666;display:flex;gap:6px;align-items:center;"><input type="checkbox" id="rename-${cat}" checked> Also rename files</label>
+        <button class="btn-secondary generate-btn" onclick="proposeCategory(event, '${cat}', false)">&#10024; Generate untagged</button>
+        <button class="btn-secondary generate-btn" onclick="proposeCategory(event, '${cat}', true)">&#8635; Generate all</button>
+        <button class="btn-publish" onclick="applyPhotos(event, '${cat}')">Apply approved</button>
+      </div>
+    </div>
+    <div class="select-all-row"><input type="checkbox" id="pselect-all-${cat}" onchange="toggleAll('panel-photos-${cat}', '.photo-check', this.checked)"><label for="pselect-all-${cat}">Select all</label></div>
+    <table><thead><tr><th style="width:28px;"></th><th style="width:76px;">Image</th><th style="width:22%;">Product</th><th style="width:22%;">New file name</th><th>Alt text <span style="font-weight:400;color:#aaa;">(max 125)</span></th><th style="width:110px;">Status</th><th style="width:80px;"></th></tr></thead>
+    <tbody>${rows.join('')}</tbody></table>`;
+}
+async function loadPhotos(cat) {
+  if (loaded.photos.has(cat)) return;
+  loaded.photos.add(cat);
+  try { renderPhotos(cat, await api('/photos/' + cat)); }
+  catch (e) { loaded.photos.delete(cat); $('panel-photos-' + cat).innerHTML = `<p style="color:#c53030;padding:20px 0;">Failed to load: ${esc(e.message)}</p>`; }
+}
+function setPhotoGenerated(k, prop) {
+  if (!$('prow-' + k)) return;
+  $('fn-' + k).value = prop.filename; $('alt-' + k).value = prop.alt;
+  updateCharCount($('alt-' + k), 'alt-count-' + k, 125);
+  $('prow-' + k).className = 'generated';
+  const s = $('pstatus-' + k); s.textContent = prop.view; s.className = 'status-badge status-generated';
+  $('prow-' + k).querySelector('.photo-check').checked = true;
+}
+async function proposeOne(ev, pid, iid) {
+  const done = busy(ev.currentTarget, '');
+  try { setPhotoGenerated(`${pid}-${iid}`, await api('/photos/propose', {product_id: pid, image_id: iid})); }
+  catch (e) { showToast('Error: ' + e.message, true); } finally { done(); }
+}
+async function proposeCategory(ev, cat, overwrite) {
+  const done = busy(ev.currentTarget, ' Looking at photos...');
+  try {
+    const results = await api('/photos/propose-category', {category: cat, overwrite});
+    let n = 0;
+    for (const [k, prop] of Object.entries(results)) if (!prop.error) { setPhotoGenerated(k, prop); n++; }
+    showToast(`Tagged ${n} photos. Review, then Apply approved.`);
+  } catch (e) { showToast('Error: ' + e.message, true); } finally { done(); }
+}
+async function applyPhotos(ev, cat) {
+  const panel = $('panel-photos-' + cat);
+  const checked = panel.querySelectorAll('.photo-check:checked');
+  if (!checked.length) { showToast('No photos selected', true); return; }
+  const rename = $('rename-' + cat).checked;
+  const done = busy(ev.currentTarget, ' Applying...');
+  const payload = Array.from(checked).map(cb => { const k = `${cb.dataset.productId}-${cb.dataset.imageId}`; return { product_id: +cb.dataset.productId, image_id: +cb.dataset.imageId, alt: $('alt-' + k).value.trim(), filename: $('fn-' + k).value.trim(), rename }; });
+  try {
+    const data = await api('/photos/apply', payload);
+    let renameErr = null;
+    data.published.forEach(r => {
+      const k = `${r.product_id}-${r.image_id}`; const s = $('pstatus-' + k);
+      if (r.rename_error) { renameErr = r.rename_error; s.textContent = 'Alt saved, rename failed'; s.className = 'status-badge status-generated'; }
+      else { s.textContent = r.renamed ? 'Alt + file name saved' : 'Alt saved'; s.className = 'status-badge status-ok'; $('prow-' + k).className = 'done'; }
+      $('prow-' + k).querySelector('.photo-check').checked = false;
+    });
+    if (renameErr) showToast(renameErr, true);
+    else showToast(`Applied ${data.published.length} photos${data.errors.length ? `, ${data.errors.length} failed: ${data.errors[0].error}` : ''}`, data.errors.length > 0);
+  } catch (e) { showToast('Error: ' + e.message, true); } finally { done(); }
+}
+
+// ── Approval queue ─────────────────────────────────────────────────────────────
+async function loadPending() {
+  const panel = $('panel-pending');
+  try {
+    const data = await api('/pending');
+    setPendingPill(data.pending.length);
+    if (!data.pending.length) { panel.innerHTML = '<p class="empty">Nothing waiting for approval. New styles created in Shopify will show up here with SEO copy already written.</p>'; return; }
+    panel.innerHTML = `
+      <div class="panel-header">
+        <h2>Approval queue <span class="sub">${data.pending.length} new style${data.pending.length === 1 ? '' : 's'} with copy ready for merch review</span></h2>
+        <div class="actions">
+          <button class="btn-danger" onclick="dismissPending(event)">Dismiss selected</button>
+          <button class="btn-publish" onclick="approvePending(event)">Approve &amp; publish selected</button>
+        </div>
+      </div>
+      <div class="select-all-row"><input type="checkbox" id="qselect-all" onchange="toggleAll('panel-pending', '.q-check', this.checked)"><label for="qselect-all">Select all</label></div>
+      <table><thead><tr><th style="width:28px;"></th><th style="width:22%;">Product</th><th style="width:25%;">SEO Title <span style="font-weight:400;color:#aaa;">(max 60)</span></th><th>Meta Description <span style="font-weight:400;color:#aaa;">(max 155)</span></th><th style="width:140px;">Created</th></tr></thead>
+      <tbody>${data.pending.map(r => `
+        <tr id="qrow-${r.product_id}">
+          <td><input type="checkbox" class="q-check" data-id="${r.product_id}"></td>
+          <td><div class="product-name">${esc(r.title)}</div><div class="product-handle">${esc(r.handle)} &middot; ${esc(r.status || '')}</div>
+              <div class="product-handle"><a href="https://admin.shopify.com/store/{{ store_handle }}/products/${r.product_id}" target="_blank">open in Shopify</a></div></td>
+          <td><textarea class="seo-field" id="qtitle-${r.product_id}" rows="2" oninput="updateCharCount(this,'qtitle-count-${r.product_id}',60)">${esc(r.seo_title)}</textarea><div class="char-count" id="qtitle-count-${r.product_id}">${r.seo_title.length}/60</div></td>
+          <td><textarea class="seo-field" id="qdesc-${r.product_id}" rows="3" oninput="updateCharCount(this,'qdesc-count-${r.product_id}',155)">${esc(r.seo_desc)}</textarea><div class="char-count" id="qdesc-count-${r.product_id}">${r.seo_desc.length}/155</div></td>
+          <td style="color:#999;">${new Date(r.created_at * 1000).toLocaleString()}<div class="product-handle">${esc(r.source || '')}</div></td>
+        </tr>`).join('')}</tbody></table>`;
+  } catch (e) { panel.innerHTML = `<p style="color:#c53030;padding:20px 0;">Failed to load: ${esc(e.message)}</p>`; }
+}
+function selectedPending() { return Array.from(document.querySelectorAll('#panel-pending .q-check:checked')).map(cb => cb.dataset.id); }
+async function approvePending(ev) {
+  const ids = selectedPending();
+  if (!ids.length) { showToast('Select at least one style', true); return; }
+  const done = busy(ev.currentTarget, ' Publishing...');
+  try {
+    const data = await api('/pending/approve', ids.map(id => ({ product_id: id, title: $('qtitle-' + id).value.trim(), description: $('qdesc-' + id).value.trim() })));
+    showToast(`Published ${data.published.length} to Shopify${data.errors.length ? `, ${data.errors.length} failed: ${data.errors[0].error}` : ''}`, data.errors.length > 0);
+    loaded.seo.clear();
+    await loadPending();
+  } catch (e) { showToast('Error: ' + e.message, true); } finally { done(); }
+}
+async function dismissPending(ev) {
+  const ids = selectedPending();
+  if (!ids.length) { showToast('Select at least one style', true); return; }
+  if (!confirm(`Remove ${ids.length} item(s) from the queue without publishing?`)) return;
+  const done = busy(ev.currentTarget, '');
+  try { await api('/pending/dismiss', {product_ids: ids}); await loadPending(); } catch (e) { showToast('Error: ' + e.message, true); } finally { done(); }
+}
+
+// ── Setup & activity ───────────────────────────────────────────────────────────
+async function loadSetup() {
+  const panel = $('panel-setup');
+  try {
+    const [s, a] = await Promise.all([api('/status'), api('/activity')]);
+    const item = (ok, label, hint) => `<li><span class="${ok ? 'ok' : 'bad'}">${ok ? '&#10003;' : '&#10007;'}</span><div>${label}${hint ? `<div class="hint">${hint}</div>` : ''}</div></li>`;
+    const wh = s.webhooks.map(w => `${esc(w.topic)} &rarr; ${esc(w.url)}`).join('<br>') || 'none registered';
+    panel.innerHTML = `
+      <div class="setup-grid">
+        <div>
+          <h2 style="font-size:15px;font-weight:500;margin-bottom:12px;">Setup checklist</h2>
+          <ul class="check-list">
+            ${item(s.shopify_connected, `Connected to Shopify store <b>${esc(s.store)}</b>`, s.error ? esc(s.error) : `Permissions: ${esc(s.scopes.join(', '))}`)}
+            ${item(s.anthropic_key_set, 'Claude API key set', `Copy: ${esc(s.model)} &middot; Photo classification: ${esc(s.vision_model)}`)}
+            ${item(s.can_rename_files, 'Can rename photo files', s.can_rename_files ? '' : 'Alt text works now. Renaming needs the <b>write_files</b> permission added to the Shopify app (see README, "Photo renames"). Until then the Photos tab saves alt text and reports the rename as skipped.')}
+            ${item(!!s.public_url, 'Public URL set', s.public_url ? esc(s.public_url) : 'Set PUBLIC_URL in .env once the app is hosted. Needed so Shopify can call this app when a style is created.')}
+            ${item(s.webhooks_ok, 'Shopify webhooks registered (auto-generate on new styles)', wh)}
+            ${item(s.password_protected, 'Password protection', s.password_protected ? 'On' : 'Off. Fine on your laptop; set APP_PASSWORD before hosting publicly.')}
+            ${item(true, `Auto-tag new photos: <b>${s.auto_apply_photos ? 'on' : 'off'}</b>`, s.auto_apply_photos ? 'New photos get alt text (and a standard file name, once renaming is permitted) automatically.' : 'New photos wait in the Photos tab.')}
+          </ul>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input class="text" id="public-url" placeholder="https://your-hosted-app-url" value="${esc(s.public_url)}">
+            <button class="btn-secondary" onclick="registerWebhooks(event)">Register webhooks</button>
+          </div>
+        </div>
+        <div>
+          <h2 style="font-size:15px;font-weight:500;margin-bottom:12px;">Activity <span class="sub" style="font-size:12px;color:#999;font-weight:400;">(what the automation did) &middot; <a href="#" onclick="loadSetup(); return false;">refresh</a></span></h2>
+          ${a.activity.length ? `<table><tbody>${a.activity.map(e => `
+            <tr><td style="width:150px;color:#999;white-space:nowrap;">${new Date(e.ts * 1000).toLocaleString()}</td>
+                <td style="width:130px;"><span class="event ${esc(e.event)}">${esc(e.event.replace(/_/g, ' '))}</span></td>
+                <td>${esc(e.title || '')} ${e.product_id ? `<span class="product-handle">#${e.product_id}</span>` : ''}
+                    ${e.view ? `<div class="product-handle">${esc(e.view)} &middot; ${esc(e.filename || '')}${e.renamed ? ' (renamed)' : ''}</div>` : ''}
+                    ${e.reason ? `<div class="product-handle">${esc(e.reason)}</div>` : ''}
+                    ${e.error ? `<div class="product-handle" style="color:#c53030;">${esc(e.error)}</div>` : ''}
+                    ${e.source ? `<div class="product-handle">${esc(e.source)}</div>` : ''}</td></tr>`).join('')}</tbody></table>`
+          : '<p style="color:#999;font-size:13px;">Nothing yet. Create a product in Shopify (or publish something here) and it will appear.</p>'}
+        </div>
+      </div>`;
+  } catch (e) { panel.innerHTML = `<p style="color:#c53030;padding:20px 0;">Failed to load: ${esc(e.message)}</p>`; }
+}
+async function registerWebhooks(ev) {
+  const done = busy(ev.currentTarget, ' Registering...');
+  try { const r = await api('/setup/register-webhooks', {public_url: $('public-url').value.trim()}); showToast(`Registered ${r.created.length} new webhook(s)`); await loadSetup(); }
+  catch (e) { showToast(e.message, true); } finally { done(); }
+}
+
+// ── General ────────────────────────────────────────────────────────────────────
+async function reloadProducts() { await fetch('/reload', {method: 'POST'}); location.reload(); }
+loadSeo(currentCat);
+</script>
+</body>
+</html>
