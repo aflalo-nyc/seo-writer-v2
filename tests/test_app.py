@@ -83,7 +83,14 @@ def test_webhook_photo_tagging_applies_alt_and_rename(monkeypatch):
     product = {"id": 11, "gid": "gid://shopify/Product/11", "title": "Herve Sweater in Cashmere", "handle": "herve-sweater-black",
                "tags": "Sweaters", "status": "active", "created_at": "2026-09-18T00:00:00Z", "body_html": "",
                "seo": {"title_tag": "x", "description_tag": "y"}}
-    images = [{"id": 501, "position": 2, "src": "https://cdn/x/files/20260705_AFLALO_1123copy.png?v=1", "alt": "", "filename": "20260705_AFLALO_1123copy.png"}]
+    import datetime
+    now = datetime.datetime.now(datetime.timezone.utc)
+    images = [
+        {"id": 501, "position": 2, "src": "https://cdn/x/files/20260705_AFLALO_1123copy.png?v=1", "alt": "", "filename": "20260705_AFLALO_1123copy.png",
+         "created_at": (now - datetime.timedelta(hours=1)).isoformat()},
+        {"id": 502, "position": 3, "src": "https://cdn/x/files/old_shot.png?v=1", "alt": "", "filename": "old_shot.png",
+         "created_at": (now - datetime.timedelta(days=90)).isoformat()},
+    ]
     monkeypatch.setattr(app_module.sh, "get_product", lambda pid: dict(product))
     monkeypatch.setattr(app_module.sh, "get_product_images", lambda pid: [dict(i) for i in images])
     monkeypatch.setattr(app_module, "_load_all", lambda force=False: [])

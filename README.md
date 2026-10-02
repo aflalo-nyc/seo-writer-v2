@@ -64,6 +64,7 @@ tunnel's https address as `PUBLIC_URL`. Remove the tunnel's webhooks afterwards 
 | Variable | Default | Meaning |
 |---|---|---|
 | `AUTO_APPLY_PHOTOS` | `true` | Webhook tags and renames new photos on its own. `false` = they wait in the Photos tab. |
+| `AUTO_TAG_MAX_AGE_HOURS` | `48` | On a product update, only photos uploaded within this window are auto-tagged. Older ones are for the Photos tab cleanup. |
 | `GEN_WORKERS` | `4` | How many products / photos are processed at once. |
 | `CLAUDE_MODEL` | `claude-opus-5` | Writes the SEO copy. |
 | `CLAUDE_VISION_MODEL` | `claude-sonnet-5` | Classifies photos. |

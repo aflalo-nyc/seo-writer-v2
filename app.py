@@ -1,4 +1,5 @@
 import base64
+import datetime
 import hashlib
 import hmac
 import json
@@ -10,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, Response, abort, jsonify, render_template, request
 
 from config import (
-    ANTHROPIC_API_KEY, APP_PASSWORD, AUTO_APPLY_PHOTOS, CATEGORIES, CLAUDE_MODEL, CLAUDE_VISION_MODEL,
+    ANTHROPIC_API_KEY, APP_PASSWORD, AUTO_APPLY_PHOTOS, AUTO_TAG_MAX_AGE_HOURS, CATEGORIES, CLAUDE_MODEL, CLAUDE_VISION_MODEL,
     GEN_WORKERS, PORT, PUBLIC_URL, SHOPIFY_STORE, SHOPIFY_WEBHOOK_SECRET,
 )
 import shopify_client as sh
@@ -403,7 +404,7 @@ def _handle_product_event(action: str, product_id: int) -> None:
             return
         _upsert_cached(product)
         _maybe_queue_seo(product, action)
-        _process_photos(product)
+        _process_photos(product, recent_only=(action == "update"))
     except Exception as e:
         logger.exception("Webhook handling failed for product %s", product_id)
         store.log("error", product_id=product_id, where=f"webhook products/{action}", error=str(e))
@@ -427,11 +428,28 @@ def _maybe_queue_seo(product: dict, action: str) -> None:
     store.log("seo_generated", product_id=product["id"], title=product["title"], source=f"webhook products/{action}")
 
 
-def _process_photos(product: dict) -> None:
-    """Tag (alt text) and rename any photo on the product that doesn't follow the convention yet."""
+def _is_recent_upload(img: dict) -> bool:
+    """True if the image was uploaded within AUTO_TAG_MAX_AGE_HOURS (unknown date counts as recent)."""
+    raw = img.get("created_at")
+    if not raw:
+        return True
+    try:
+        created = datetime.datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    return datetime.datetime.now(datetime.timezone.utc) - created <= datetime.timedelta(hours=AUTO_TAG_MAX_AGE_HOURS)
+
+
+def _process_photos(product: dict, recent_only: bool = False) -> None:
+    """Tag (alt text) and rename photos that don't follow the convention yet.
+
+    A brand-new product gets all its photos tagged. On an update event only recently uploaded photos
+    are touched, so re-saving an old product does not silently rewrite its whole gallery.
+    """
     images = sh.get_product_images(product["id"])
     product["images"] = images
-    targets = [img for img in images if _photo_needs_work(img) and not store.is_media_processed(img["id"])]
+    targets = [img for img in images if _photo_needs_work(img) and not store.is_media_processed(img["id"])
+               and (not recent_only or _is_recent_upload(img))]
     if not targets:
         return
     if not AUTO_APPLY_PHOTOS:

@@ -132,10 +132,11 @@ def set_seo(product_id: int, seo_title: str, seo_description: str) -> None:
 # ---------------------------------------------------------------- images (REST)
 
 def get_product_images(product_id: int) -> list[dict]:
-    resp = requests.get(f"{BASE_URL}/products/{product_id}/images.json", headers=_headers(), params={"fields": "id,position,src,alt"}, timeout=15)
+    resp = requests.get(f"{BASE_URL}/products/{product_id}/images.json", headers=_headers(), params={"fields": "id,position,src,alt,created_at"}, timeout=15)
     resp.raise_for_status()
     return [
-        {"id": img["id"], "position": img.get("position", 0), "src": img["src"], "alt": img.get("alt") or "", "filename": basename_from_url(img["src"])}
+        {"id": img["id"], "position": img.get("position", 0), "src": img["src"], "alt": img.get("alt") or "",
+         "filename": basename_from_url(img["src"]), "created_at": img.get("created_at")}
         for img in resp.json().get("images", [])
     ]
 
