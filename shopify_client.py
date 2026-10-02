@@ -9,7 +9,7 @@ import logging
 import time
 import requests
 from concurrent.futures import ThreadPoolExecutor
-from config import SHOPIFY_STORE, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET
+from config import SHOPIFY_STORE, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET, SHOPIFY_ACCESS_TOKEN
 from naming import basename_from_url
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,8 @@ class ShopifyError(Exception):
 
 def _get_access_token() -> str:
     global _token, _token_expiry
+    if SHOPIFY_ACCESS_TOKEN:          # permanent token from an admin custom app
+        return SHOPIFY_ACCESS_TOKEN
     if _token and time.time() < _token_expiry - 60:
         return _token
     resp = requests.post(

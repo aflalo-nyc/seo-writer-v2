@@ -6,7 +6,11 @@ load_dotenv()
 SHOPIFY_STORE = os.environ.get("SHOPIFY_STORE", "aflalo.myshopify.com")
 SHOPIFY_CLIENT_ID = os.environ.get("SHOPIFY_CLIENT_ID", "")
 SHOPIFY_CLIENT_SECRET = os.environ.get("SHOPIFY_CLIENT_SECRET", "")
-# Webhooks created through the Admin API are signed with the app's client secret.
+# Alternative to client id/secret: a permanent Admin API access token (shpat_...) from a custom app
+# created in Shopify admin (Settings > Apps and sales channels > Develop apps). If set, it is used as-is.
+SHOPIFY_ACCESS_TOKEN = os.environ.get("SHOPIFY_ACCESS_TOKEN", "")
+# Webhooks are signed with the app's client secret (Dev Dashboard app) or its "API secret key" (admin custom app).
+# With SHOPIFY_ACCESS_TOKEN you must set this explicitly.
 SHOPIFY_WEBHOOK_SECRET = os.environ.get("SHOPIFY_WEBHOOK_SECRET", SHOPIFY_CLIENT_SECRET)
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")

@@ -26,6 +26,18 @@ Tests (no network, no keys needed):
 python -m pytest tests -q
 ```
 
+## Using your own Shopify app (recommended if you cannot edit the current one)
+
+The app works with either kind of Shopify credential. Set **one** of these in `.env` / Railway:
+
+- `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET` from an app in the Shopify Dev Dashboard (what it uses today), or
+- `SHOPIFY_ACCESS_TOKEN` (starts with `shpat_`) from a custom app created in Shopify admin, plus
+  `SHOPIFY_WEBHOOK_SECRET` set to that app's *API secret key* so webhook signatures verify.
+
+To create an admin custom app: Shopify admin > Settings > Apps and sales channels > Develop apps > Create an app >
+Configure Admin API scopes: tick `read_products`, `write_products`, `read_files`, `write_files` > Save > Install app >
+reveal the Admin API access token once and copy it. Then set the two variables above and restart.
+
 ## Permissions the Shopify app needs
 
 The app authenticates with the client id/secret of a Shopify custom app (Dev Dashboard → Apps).
