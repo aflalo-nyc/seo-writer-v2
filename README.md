@@ -26,6 +26,24 @@ Tests (no network, no keys needed):
 python -m pytest tests -q
 ```
 
+## Status (2 Oct 2026) and the one remaining step
+
+Live on Railway (workspace *AFLALO Projects*, project `aflalo-seo-writer`), webhooks registered, end-to-end test passed.
+The only thing not working is **photo file renames**: the Shopify app the keys belong to (*Product Agent*, developer
+*Daughters Group LLC*) lacks the `write_files` permission and cannot be edited by us. A replacement app has been created in
+the Dev Dashboard but a **store owner (or staff with "install apps" permission)** must install it:
+
+1. Signed in to the Aflalo admin as the store owner, open
+   `https://admin.shopify.com/store/aflalo/oauth/install?client_id=aa086d5b664b8d3f47378026e0e252d6` and click **Install**.
+   The consent screen must list read/write products and read/write files; if files are missing, add them under the app's
+   *Access scopes* in the Dev Dashboard and release the version first.
+2. In Railway, service `seo-writer` > Variables: replace `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET` with the new app's
+   client id and secret (Sanskriti has them). Railway redeploys.
+3. In the app's **Setup & activity** tab click **Register webhooks** (they are per app). Then remove the old app's webhooks
+   from a laptop that still has the old keys in `.env`:
+   `python register_webhooks.py https://seo-writer-production-4bec.up.railway.app --remove`
+4. Setup tab row *Can rename photo files* turns green. Test: Photos tab, any category, Generate on one row, Apply approved.
+
 ## Using your own Shopify app (recommended if you cannot edit the current one)
 
 The app works with either kind of Shopify credential. Set **one** of these in `.env` / Railway:
