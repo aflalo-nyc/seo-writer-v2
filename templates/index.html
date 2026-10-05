@@ -95,6 +95,7 @@
       <button class="mode-btn" id="mode-btn-setup" onclick="switchMode('setup')">Setup &amp; activity</button>
     </div>
     <span class="reload-btn" onclick="reloadProducts()">&#8635; Reload products</span>
+    {% if session.user %}<span class="reload-btn">{{ session.user }} · <a href="/logout" style="color:inherit">Sign out</a></span>{% endif %}
   </div>
 </header>
 

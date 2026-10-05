@@ -6,14 +6,18 @@ import json
 import logging
 import re
 import threading
+import secrets
+import urllib.parse
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from flask import Flask, Response, abort, jsonify, render_template, request
+from flask import Flask, Response, abort, jsonify, redirect, render_template, request, session
+from markupsafe import escape
 
 from config import (
-    ANTHROPIC_API_KEY, APP_PASSWORD, AUTO_APPLY_PHOTOS, AUTO_TAG_MAX_AGE_HOURS, CATEGORIES, CLAUDE_MODEL, CLAUDE_VISION_MODEL,
-    GEN_WORKERS, PORT, PUBLIC_URL, SHOPIFY_STORE, SHOPIFY_WEBHOOK_SECRET,
+    ALLOWED_EMAIL_DOMAIN, ANTHROPIC_API_KEY, APP_PASSWORD, AUTO_APPLY_PHOTOS, AUTO_TAG_MAX_AGE_HOURS, CATEGORIES,
+    CLAUDE_MODEL, CLAUDE_VISION_MODEL, GEN_WORKERS, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, PORT, PUBLIC_URL, SECRET_KEY,
+    SHOPIFY_STORE, SHOPIFY_WEBHOOK_SECRET,
 )
 import shopify_client as sh
 from ai_client import classify_view, generate_seo
@@ -24,6 +28,16 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.config.update(
+    SECRET_KEY=SECRET_KEY or (
+        hashlib.sha256(b"seo-writer-session:" + GOOGLE_CLIENT_SECRET.encode()).hexdigest()
+        if GOOGLE_CLIENT_SECRET else secrets.token_hex(32)
+    ),
+    SESSION_COOKIE_SECURE=PUBLIC_URL.startswith("https://"),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=datetime.timedelta(days=7),
+)
 
 # ----------------------------------------------------------------------------- catalog cache
 
@@ -138,14 +152,118 @@ def _image_json(img: dict) -> dict:
 
 # ----------------------------------------------------------------------------- auth
 
+# Google sign-in when GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are set (only @ALLOWED_EMAIL_DOMAIN accounts),
+# otherwise the shared APP_PASSWORD, otherwise open. Webhooks and /health are never gated.
+
+GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+_OPEN_PATHS = ("/health", "/login", "/logout", "/auth/callback")
+
+
+def _google_on() -> bool:
+    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)
+
+
+def _redirect_uri() -> str:
+    return (PUBLIC_URL or request.host_url.rstrip("/")) + "/auth/callback"
+
+
+def _safe_next(target: str) -> str:
+    """Only paths on this site, so a sign-in link can't send someone elsewhere."""
+    return target if target.startswith("/") and not target.startswith("//") else "/"
+
+
+def _sign_in_page(message: str, status: int = 200) -> tuple[str, int]:
+    return (
+        "<!doctype html><title>Aflalo SEO Writer</title>"
+        "<body style=\"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f5;"
+        "color:#1a1a1a;display:grid;place-items:center;min-height:100vh;margin:0\">"
+        "<main style=\"background:#fff;padding:32px 36px;border-radius:8px;max-width:420px\">"
+        "<h1 style=\"font-size:18px;font-weight:500;margin:0 0 12px\">Aflalo SEO Writer</h1>"
+        f"<p style=\"margin:0 0 20px;line-height:1.5\">{escape(message)}</p>"
+        "<a href=\"/login\" style=\"display:inline-block;background:#1a1a1a;color:#fff;padding:10px 16px;"
+        "border-radius:6px;text-decoration:none\">Sign in with Google</a></main></body>"
+    ), status
+
+
 @app.before_request
-def _require_password():
-    if not APP_PASSWORD or request.path.startswith("/webhooks/") or request.path == "/health":
+def _require_sign_in():
+    if request.path.startswith("/webhooks/") or request.path in _OPEN_PATHS:
+        return None
+    if _google_on():
+        if session.get("user"):
+            return None
+        # A browser opening a page goes to Google; the page's own fetch() calls get a 401 instead of a redirect.
+        if request.method == "GET" and "text/html" in request.headers.get("Accept", ""):
+            return redirect("/login?" + urllib.parse.urlencode({"next": request.full_path.rstrip("?")}))
+        return jsonify({"error": "Signed out. Reload the page to sign in again."}), 401
+    if not APP_PASSWORD:
         return None
     auth = request.authorization
     if auth and hmac.compare_digest(auth.password or "", APP_PASSWORD):
         return None
     return Response("Password required", 401, {"WWW-Authenticate": 'Basic realm="Aflalo SEO Writer"'})
+
+
+@app.route("/login")
+def login():
+    if not _google_on():
+        return redirect("/")
+    session["oauth_state"] = state = secrets.token_urlsafe(24)
+    session["next"] = _safe_next(request.args.get("next", "/"))
+    params = {
+        "client_id": GOOGLE_CLIENT_ID, "redirect_uri": _redirect_uri(), "response_type": "code",
+        "scope": "openid email", "state": state, "hd": ALLOWED_EMAIL_DOMAIN, "prompt": "select_account",
+    }
+    return redirect(GOOGLE_AUTH_URL + "?" + urllib.parse.urlencode(params))
+
+
+@app.route("/auth/callback")
+def auth_callback():
+    state = session.pop("oauth_state", None)
+    if not state or not hmac.compare_digest(state.encode(), request.args.get("state", "").encode()):
+        return _sign_in_page("That sign-in link expired. Try again.", 400)
+    if "code" not in request.args:
+        return _sign_in_page("Google sign-in was cancelled.", 400)
+
+    token = requests.post(GOOGLE_TOKEN_URL, data={
+        "code": request.args["code"], "client_id": GOOGLE_CLIENT_ID, "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri": _redirect_uri(), "grant_type": "authorization_code",
+    }, timeout=15)
+    if not token.ok:
+        logger.warning("Google token exchange failed: %s %s", token.status_code, token.text[:200])
+        return _sign_in_page("Google sign-in failed. Try again.", 502)
+    info = requests.get(GOOGLE_USERINFO_URL, headers={"Authorization": "Bearer " + token.json()["access_token"]}, timeout=15)
+    if not info.ok:
+        logger.warning("Google userinfo failed: %s %s", info.status_code, info.text[:200])
+        return _sign_in_page("Google sign-in failed. Try again.", 502)
+
+    user = info.json()
+    email = (user.get("email") or "").lower()
+    allowed = (
+        user.get("email_verified") in (True, "true")
+        and email.endswith("@" + ALLOWED_EMAIL_DOMAIN)
+        and (user.get("hd") or "").lower() == ALLOWED_EMAIL_DOMAIN   # a Workspace account, not a personal one
+    )
+    if not allowed:
+        logger.info("Sign-in refused for %s", email or "an account with no email")
+        return _sign_in_page(f"{email or 'That account'} can't use this app. Sign in with your @{ALLOWED_EMAIL_DOMAIN} account.", 403)
+
+    next_path = session.pop("next", "/")
+    session.clear()
+    session.permanent = True
+    session["user"] = email
+    logger.info("Signed in: %s", email)
+    return redirect(next_path)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    if not _google_on():
+        return redirect("/")
+    return _sign_in_page("You're signed out.")
 
 
 # ----------------------------------------------------------------------------- pages
@@ -337,6 +455,7 @@ def activity():
 def status():
     out = {
         "store": SHOPIFY_STORE, "public_url": PUBLIC_URL, "password_protected": bool(APP_PASSWORD),
+        "sign_in": "google" if _google_on() else ("password" if APP_PASSWORD else "none"),
         "auto_apply_photos": AUTO_APPLY_PHOTOS, "model": CLAUDE_MODEL, "vision_model": CLAUDE_VISION_MODEL,
         "anthropic_key_set": bool(ANTHROPIC_API_KEY), "pending": len(store.get_pending()),
         "webhooks": [], "scopes": [],

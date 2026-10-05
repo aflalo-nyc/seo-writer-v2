@@ -23,7 +23,16 @@ PORT = int(os.environ.get("PORT", 4000))
 # Public https URL of this app once hosted (needed for Shopify webhooks), e.g. https://aflalo-seo.onrender.com
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "").rstrip("/")
 # If set, every page except /webhooks/* and /health asks for this password (any username).
+# Ignored once Google sign-in is configured.
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+
+# Google sign-in: an OAuth client (Web application) whose redirect URI is <PUBLIC_URL>/auth/callback.
+# When both are set, the UI asks people to sign in with a Google account on ALLOWED_EMAIL_DOMAIN.
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+ALLOWED_EMAIL_DOMAIN = os.environ.get("ALLOWED_EMAIL_DOMAIN", "aflalonyc.com").lower()
+# Signs the sign-in cookie. Defaults to a key derived from the Google client secret.
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
 
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "data"))
 GEN_WORKERS = int(os.environ.get("GEN_WORKERS", 4))
