@@ -23,14 +23,15 @@ replacement app in the Shopify Dev Dashboard, but it only works once a store own
 1. **Store owner installs the new app** (Sarena, or anyone with "install apps" permission). Signed in to
    the Aflalo admin, open
    `https://admin.shopify.com/store/aflalo/oauth/install?client_id=aa086d5b664b8d3f47378026e0e252d6`
-   and click Install. The consent screen must list read/write **products** and read/write **files**.
-   If files is missing, add it under the app's Access scopes in the Dev Dashboard, release the version,
-   then install.
+   and click Install. The app is called **SEO-WRITER-AI**. As of 2026-10-05 it already asks for the
+   four permissions it needs (read/write products, read/write files) and is not installed yet.
 2. **Swap the keys on Railway.** `seo-writer` → Variables: replace `SHOPIFY_CLIENT_ID` and
    `SHOPIFY_CLIENT_SECRET` with the new app's. The secret is in the Dev Dashboard under the app's
    settings, and Sanskriti also has it.
-3. **Move the webhooks to the new app.** In the app, open Setup & activity → Register webhooks. Then
-   remove the old app's webhooks from a laptop with the *old* keys in `.env`:
+3. **Register the webhooks for the new app.** In the app, open Setup & activity → Register webhooks.
+   The old app's webhooks still point here. The app rejects their events once the keys change, and
+   Shopify drops webhooks that keep failing, so removing them is tidy-up, not a blocker. To remove
+   them now, Sanskriti can run this from her laptop, which has the old keys:
    `python register_webhooks.py https://seo-writer-production-4bec.up.railway.app --remove`
 4. **Check it.** In the Setup tab, *Can rename photo files* turns green. Then go to the Photos tab →
    pick one category → Generate on one row → Apply approved, and confirm the file name changed in
