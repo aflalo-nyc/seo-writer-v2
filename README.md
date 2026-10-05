@@ -91,6 +91,23 @@ To test webhooks from your laptop without hosting, run a tunnel (e.g. `ngrok htt
 tunnel's https address as `PUBLIC_URL`. Remove the tunnel's webhooks afterwards with
 `python register_webhooks.py https://<tunnel address> --remove`.
 
+## Sign-in
+
+With `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set, people sign in with their Google account, and
+only @aflalonyc.com Workspace accounts get in (`ALLOWED_EMAIL_DOMAIN`). A sign-in lasts 7 days, and
+the header shows who is signed in with a Sign out link. Without them the app falls back to
+`APP_PASSWORD` (any username), and with neither it is open. Webhooks and `/health` are never gated.
+
+To set it up, in Google Cloud Console (signed in as an aflalonyc.com admin):
+
+1. APIs & Services → OAuth consent screen: if the project has none, create one with user type
+   **Internal**, so only aflalonyc.com accounts can use it.
+2. APIs & Services → Credentials → Create credentials → OAuth client ID → **Web application**.
+   Authorized redirect URI: `<PUBLIC_URL>/auth/callback`, e.g.
+   `https://seo-writer-production-4bec.up.railway.app/auth/callback`.
+3. Put the client ID and secret on the host as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+   `APP_PASSWORD` can be deleted once Google sign-in works.
+
 ## Settings
 
 | Variable | Default | Meaning |
@@ -100,7 +117,10 @@ tunnel's https address as `PUBLIC_URL`. Remove the tunnel's webhooks afterwards 
 | `GEN_WORKERS` | `4` | How many products / photos are processed at once. |
 | `CLAUDE_MODEL` | `claude-opus-5` | Writes the SEO copy. |
 | `CLAUDE_VISION_MODEL` | `claude-sonnet-5` | Classifies photos. |
-| `APP_PASSWORD` | empty | When set, the UI asks for it (any username). Webhooks are unaffected. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | empty | Turns on Google sign-in (see Sign-in). |
+| `ALLOWED_EMAIL_DOMAIN` | `aflalonyc.com` | The only Google Workspace domain that can sign in. |
+| `SECRET_KEY` | derived from the Google secret | Signs the sign-in cookie. Changing it signs everyone out. |
+| `APP_PASSWORD` | empty | Used only without Google sign-in: the UI asks for it (any username). Webhooks are unaffected. |
 
 ## Files
 
