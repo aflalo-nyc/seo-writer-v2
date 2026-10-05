@@ -1,5 +1,7 @@
 # Aflalo SEO Writer
 
+**Current state and what's left: [STATUS.md](STATUS.md)**
+
 Writes and publishes SEO copy (page title + meta description), image alt text and standard photo
 file names for products on the Aflalo Shopify store. Runs as a small Flask app.
 
