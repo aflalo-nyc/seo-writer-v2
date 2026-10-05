@@ -21,7 +21,7 @@ from config import (
 )
 import shopify_client as sh
 from ai_client import classify_view, generate_seo
-from naming import build_alt, build_filename, color_from_handle, extension_from_url, is_standard_alt, is_standard_filename
+from naming import build_alt, build_filename, extension_from_url, is_standard_alt, is_standard_filename, product_color
 from store import store
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -128,9 +128,13 @@ def _photo_needs_work(img: dict) -> bool:
     return not (is_standard_alt(img.get("alt", "")) and is_standard_filename(img.get("filename", "")))
 
 
+def _color(product: dict) -> str:
+    return product_color(product.get("colors") or [], product["handle"], product["title"])
+
+
 def _photo_proposal(product: dict, img: dict) -> dict:
     view = classify_view(img["src"], product["title"])
-    color = color_from_handle(product["handle"], product["title"])
+    color = _color(product)
     return {
         "view": view,
         "alt": build_alt(product["title"], color, view),
@@ -367,7 +371,7 @@ def photos(cat: str):
     for p in products:
         out.append({
             "id": p["id"], "title": p["title"], "handle": p["handle"],
-            "color": color_from_handle(p["handle"], p["title"]),
+            "color": _color(p),
             "images": [_image_json(img) for img in p.get("images", [])],
         })
     missing = sum(1 for p in products for img in p.get("images", []) if _photo_needs_work(img))

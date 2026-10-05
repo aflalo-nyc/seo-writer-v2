@@ -1,5 +1,5 @@
 from naming import (
-    product_name, material, color_from_handle, build_alt, build_filename,
+    product_name, material, color_from_handle, product_color, build_alt, build_filename,
     is_standard_filename, is_standard_alt, normalize_view, basename_from_url,
 )
 
@@ -46,3 +46,19 @@ def test_normalize_view():
 
 def test_basename_from_url():
     assert basename_from_url("https://cdn.shopify.com/s/files/1/x/files/Foo_01.webp?v=123") == "Foo_01.webp"
+
+
+def test_product_color_uses_the_store_colour_not_the_handle():
+    # Real products whose handle disagrees with their Color option (2026-10-05).
+    assert product_color(["Crimson"], "artusi-top-crimson", "Artusi Sweater in Wool") == "Crimson"
+    assert product_color(["Crimson"], "monroe-top-red", "Monroe Top in Wool") == "Crimson"
+    assert product_color(["Powder"], "tavi-pant-desert-rose", "Tavi Pant in Wool") == "Powder"
+    assert product_color(["Bronze"], "lolana-pant-beige-viscose", "Lolana Pant in Viscose") == "Bronze"
+    assert product_color(["Chartreuse"], "safira-top-chartruese", "Safira Top in Silk") == "Chartreuse"
+    assert product_color(["Coral and Tiger's Eye"], "romani-cuff-silver", "Romani Cuff in Silver") == "Coral and Tiger's Eye"
+
+
+def test_product_color_with_several_or_no_colours():
+    assert product_color(["Black", "Subdued Indigo"], "bronte-jean-subdued-indigo", "Brontë Jean in Rigid Denim") == "Subdued Indigo"
+    assert product_color([], "herve-sweater-black", "Herve Sweater in Cashmere") == "Black"
+    assert product_color(["Black", "Ivory"], "gift-set", "Gift Set") == ""

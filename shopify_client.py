@@ -79,6 +79,7 @@ def product_gid(product_id: int) -> str:
 _PRODUCT_FIELDS = """
   id legacyResourceId title handle tags status descriptionHtml createdAt
   seo { title description }
+  options(first: 5) { name values }
 """
 
 
@@ -94,6 +95,8 @@ def _normalize_product(node: dict) -> dict:
         "body_html": node.get("descriptionHtml") or "",
         "created_at": node.get("createdAt"),
         "seo": {"title_tag": seo.get("title") or "", "description_tag": seo.get("description") or ""},
+        "colors": next((o.get("values") or [] for o in node.get("options") or []
+                        if (o.get("name") or "").strip().lower() in ("color", "colour")), []),
     }
 
 

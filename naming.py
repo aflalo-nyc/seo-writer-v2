@@ -49,6 +49,23 @@ def color_from_handle(handle: str, title: str) -> str:
     return " ".join(w.capitalize() for w in words)
 
 
+def product_color(colors: list[str], handle: str, title: str) -> str:
+    """The colour exactly as the store names it (the product's Color option).
+
+    Handles drift from the colour ('monroe-top-red' sells Crimson, 'artusi-top-crimson' is a
+    sweater), so the handle is only a fallback for products with no Color option. A product
+    with several colours gets the one its handle names, if any.
+    """
+    colors = [c.strip() for c in colors if c and c.strip()]
+    if len(colors) == 1:
+        return colors[0]
+    handle_words = set(handle.lower().split("-"))
+    named = [c for c in colors if set(_slug_words(c)) <= handle_words]
+    if len(named) == 1:
+        return named[0]
+    return color_from_handle(handle, title)
+
+
 def build_alt(title: str, color: str, view: str) -> str:
     """AFLALO Alune Dress in Wool Silk – Citron - Ghost Front  (max 125 chars)."""
     alt = f"AFLALO {title.strip()}"
