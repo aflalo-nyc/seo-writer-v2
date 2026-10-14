@@ -28,15 +28,19 @@ _GOLD_EXAMPLES = [
 ]
 
 
-def generate_seo(product_title: str, body_html: str, tags: str, handle: str = "", references: list[dict] | None = None) -> dict:
+def generate_seo(product_title: str, body_html: str, tags: str, handle: str = "", references: list[dict] | None = None,
+                 color: str = "") -> dict:
     """Write the SEO title + meta description for one product.
 
     `references` are live, already-approved examples from the same category
     ({"title", "seo_title", "seo_desc"}) so new copy matches what is on the site.
+    `color` is the product's Color option, as the store names it (handles drift: 'monroe-top-red' sells Crimson).
     """
     body_text = re.sub(r"<[^>]+>", " ", body_html or "").strip()
     body_text = re.sub(r"\s+", " ", body_text)[:1500]
     handle_readable = handle.replace("-", " ")
+    color_line = (f"The color, exactly as the store names it: {color}" if color
+                  else f"The color is in the handle: {handle_readable}")
 
     ref_block = ""
     if references:
@@ -69,18 +73,23 @@ Gold standard examples:
 "{_GOLD_EXAMPLES[1]}"
 
 Also write the SEO title in this format: [Product Name] [Color] in [Material] | AFLALO
-The color is in the handle: {handle_readable}
+{color_line}
+If the product name or material already says the color (Romani Cuff in Silver, color Silver), leave it out: Romani Cuff in Silver | AFLALO
 For denim use "Japanese Denim". For others extract material from the product title or description.
 
 Respond in exactly this format and nothing else:
 TITLE: <title here>
 DESCRIPTION: <description here>"""
 
+    # The model thinks before it answers; at 1024 tokens 3 of 7 test products came back empty or cut off (2026-10-14).
     message = _get_client().messages.create(
         model=CLAUDE_MODEL,
-        max_tokens=1024,
+        max_tokens=8000,
         messages=[{"role": "user", "content": prompt}],
     )
+    if message.stop_reason == "max_tokens":
+        logger.warning("SEO copy for %s ran out of tokens; returning nothing rather than a cut-off line", product_title)
+        return {"title": "", "description": ""}
     text = _text(message)
     title_match = re.search(r"TITLE:\s*(.+)", text)
     desc_match = re.search(r"DESCRIPTION:\s*(.+)", text)
@@ -108,7 +117,7 @@ Classify the shot type. Pick exactly one label from this list and reply with the
 
 Definitions:
 - "Model ..." = a person is wearing the garment. Front/Back/Side is the direction the body faces. "Model Detail" = a tight crop on a person wearing it.
-- "Ghost ..." = the garment alone on an invisible mannequin or laid flat, no person.
+- "Ghost ..." = the garment alone on an invisible mannequin or laid flat, no person. A whole piece of jewelry shown alone is "Ghost Front".
 - "Detail" = close-up of fabric, texture or construction with no person visible.
 - "Campaign" = editorial or lifestyle scene where the garment is not the clear focus."""},
             ],

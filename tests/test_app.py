@@ -95,14 +95,16 @@ def test_webhook_photo_tagging_applies_alt_and_rename(monkeypatch):
     monkeypatch.setattr(app_module.sh, "get_product_images", lambda pid: [dict(i) for i in images])
     monkeypatch.setattr(app_module, "_load_all", lambda force=False: [])
     monkeypatch.setattr(app_module, "classify_view", lambda url, title: "Model Back")
+    monkeypatch.setattr(app_module.sh, "get_file_owners", lambda: {"20260705_AFLALO_1123copy.png": [11], "old_shot.png": [11]})
+    monkeypatch.setitem(app_module._owners, "at", 0.0)
     alts, renames = [], []
     monkeypatch.setattr(app_module.sh, "set_image_alt", lambda pid, iid, alt: alts.append((pid, iid, alt)))
-    monkeypatch.setattr(app_module.sh, "rename_product_image", lambda pid, src, fn: renames.append((pid, fn)))
+    monkeypatch.setattr(app_module.sh, "rename_product_image", lambda pid, src, fn, max_age: renames.append((pid, fn)) or True)
 
     app_module._handle_product_event("update", 11)
 
-    assert alts == [(11, 501, "AFLALO Herve Sweater in Cashmere – Black - Model Back")]
-    assert renames == [(11, "HerveSweater_Black_ModelBack_02.png")]
+    assert alts == [(11, 501, "AFLALO Herve Sweater in Cashmere, Black, back view on model")]
+    assert renames == [(11, "aflalo-herve-sweater-cashmere-black-model-back-02.png")]
     assert store.is_media_processed(501)
 
     # A second update for the same product must not re-process the same photo.
@@ -131,3 +133,66 @@ def test_empty_copy_is_not_queued(monkeypatch):
     app_module._handle_product_event("create", 78)
     assert not store.is_pending(78)
     assert any(e["event"] == "error" and e.get("product_id") == 78 for e in store.get_activity())
+
+
+def _look(pid, title, handle, status="active"):
+    return {"id": pid, "gid": f"gid://shopify/Product/{pid}", "title": title, "handle": handle, "tags": "Sweaters", "status": status,
+            "created_at": "2026-08-26T00:00:00Z", "body_html": "", "colors": [], "seo": {"title_tag": "x", "description_tag": "y"}}
+
+
+def test_a_tagged_look_photo_is_retagged_when_a_second_product_shares_it(monkeypatch):
+    artusi, shay = _look(21, "Artusi Sweater in Wool", "artusi-sweater-black"), _look(22, "Shay Trouser in Wool", "shay-trouser-moss")
+    photo = {"id": 601, "position": 2, "src": "https://cdn/x/files/look_093.jpg?v=1", "filename": "look_093.jpg",
+             "alt": "AFLALO Artusi Sweater in Wool, Black, front view on model", "created_at": "2026-10-08T17:04:08Z"}
+    monkeypatch.setattr(app_module.sh, "get_product", lambda pid: dict(artusi))
+    monkeypatch.setattr(app_module.sh, "get_product_images", lambda pid: [dict(photo)])
+    monkeypatch.setattr(app_module, "_load_all", lambda force=False: [artusi, shay])
+    monkeypatch.setattr(app_module.sh, "get_file_owners", lambda: {"look_093.jpg": [21, 22]})
+    monkeypatch.setitem(app_module._owners, "at", 0.0)
+    monkeypatch.setattr(app_module, "classify_view", lambda url, title: pytest.fail("the view is already in the alt text"))
+    alts = []
+    monkeypatch.setattr(app_module.sh, "set_image_alt", lambda pid, iid, alt: alts.append(alt))
+    monkeypatch.setattr(app_module.sh, "rename_product_image", lambda *a: pytest.fail("a live photo keeps its name"))
+
+    app_module._handle_product_event("update", 21)
+    both = "AFLALO Artusi Sweater in Wool, Black, and Shay Trouser in Wool, Moss, front view on model"
+    assert alts == [both]
+
+    # The write fires both products' webhooks; each must find the alt already right, or they rewrite it forever.
+    photo["alt"] = both
+    for pid in (21, 22):
+        monkeypatch.setattr(app_module.sh, "get_product", lambda _, p=(artusi if pid == 21 else shay): dict(p))
+        app_module._handle_product_event("update", pid)
+    assert alts == [both]
+
+
+def test_a_look_photo_never_names_a_draft(monkeypatch):
+    artusi, shay = _look(31, "Artusi Sweater in Wool", "artusi-sweater-black"), _look(32, "Shay Trouser in Wool", "shay-trouser-moss", "draft")
+    monkeypatch.setattr(app_module, "_load_all", lambda force=False: [artusi, shay])
+    monkeypatch.setattr(app_module.sh, "get_file_owners", lambda: {"look.jpg": [31, 32]})
+    monkeypatch.setitem(app_module._owners, "at", 0.0)
+    img = {"filename": "look.jpg"}
+    assert app_module._photo_products(artusi, img) == [("Artusi Sweater in Wool", "Black")]
+    assert app_module._photo_products(shay, img) == [("Artusi Sweater in Wool", "Black")]
+
+
+def test_a_live_photo_keeps_its_file_name(monkeypatch):
+    import shopify_client as sh
+    renamed = []
+    monkeypatch.setattr(sh, "rename_file", lambda gid, fn: renamed.append(fn))
+    monkeypatch.setattr(sh, "get_media_by_filename", lambda pid: {"old.jpg": {"id": "gid://shopify/MediaImage/1", "created_at": "2025-09-09T00:24:25Z"}})
+    assert sh.rename_product_image(1, "https://cdn/x/files/old.jpg?v=1", "aflalo-new.jpg", 48) is False
+    import datetime
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    monkeypatch.setattr(sh, "get_media_by_filename", lambda pid: {"old.jpg": {"id": "gid://shopify/MediaImage/1", "created_at": now}})
+    assert sh.rename_product_image(1, "https://cdn/x/files/old.jpg?v=1", "aflalo-new.jpg", 48) is True
+    assert renamed == ["aflalo-new.jpg"]
+
+
+def test_seo_copy_that_runs_out_of_tokens_comes_back_empty(monkeypatch):
+    import types
+    import ai_client
+    reply = types.SimpleNamespace(stop_reason="max_tokens", content=[types.SimpleNamespace(type="text", text="TITLE: Elestra Top Crimson in Silk Crepe de")])
+    fake = types.SimpleNamespace(messages=types.SimpleNamespace(create=lambda **kw: reply))
+    monkeypatch.setattr(ai_client, "_get_client", lambda: fake)
+    assert ai_client.generate_seo("Elestra Top in Silk", "<p>Top</p>", "", "elestra-top-crimson", color="Crimson") == {"title": "", "description": ""}

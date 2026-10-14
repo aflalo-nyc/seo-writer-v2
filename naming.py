@@ -12,6 +12,18 @@ VIEWS = [
     "Detail", "Campaign",
 ]
 
+# How each view reads to a shopper: alt text in plain words (a screen reader says "Ghost Front" to nobody),
+# file names as lowercase words split by hyphens, which is what Google asks for (no underscores, no joined words).
+_ALT_VIEW = {
+    "Model Front": "front view on model", "Model Back": "back view on model", "Model Side": "side view on model",
+    "Model Detail": "close-up on model", "Ghost Front": "front view", "Ghost Back": "back view", "Ghost Side": "side view",
+    "Detail": "close-up", "Campaign": "campaign image",
+}
+_FILE_VIEW = {
+    "Model Front": "model-front", "Model Back": "model-back", "Model Side": "model-side", "Model Detail": "model-closeup",
+    "Ghost Front": "front", "Ghost Back": "back", "Ghost Side": "side", "Detail": "closeup", "Campaign": "campaign",
+}
+
 _IMAGE_EXTS = ("webp", "jpg", "jpeg", "png", "gif")
 
 
@@ -22,10 +34,6 @@ def _ascii(s: str) -> str:
 
 def _slug_words(s: str) -> list[str]:
     return [w for w in re.sub(r"[^a-z0-9]+", "-", _ascii(s).lower()).split("-") if w]
-
-
-def _pascal(s: str) -> str:
-    return "".join(w.capitalize() for w in _slug_words(s))
 
 
 def product_name(title: str) -> str:
@@ -66,41 +74,65 @@ def product_color(colors: list[str], handle: str, title: str) -> str:
     return color_from_handle(handle, title)
 
 
-def build_alt(title: str, color: str, view: str) -> str:
-    """AFLALO Alune Dress in Wool Silk – Citron - Ghost Front  (max 125 chars)."""
-    alt = f"AFLALO {title.strip()}"
-    if color:
-        alt += f" – {color}"
-    alt += f" - {view}"
-    if len(alt) > 125:
-        alt = alt[:125].rsplit(" ", 1)[0].rstrip(" ,.-–")
-    return alt
+def _pieces(products: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """[(title, colour)] as a photo names them: in title order, so the photo reads the same from every product
+    page it is on, and without a colour the title already says ('Turquoise Choker in White Gold' in Turquoise)."""
+    out = []
+    for title, color in sorted(products, key=lambda p: _ascii(p[0]).lower()):
+        color = (color or "").strip()
+        out.append((title.strip(), "" if set(_slug_words(color)) <= set(_slug_words(title)) else color))
+    return out
 
 
-def build_filename(title: str, color: str, view: str, index: int, ext: str) -> str:
-    """HerveSweater_Black_ModelFront_01.webp
+def build_alt(products: list[tuple[str, str]], view: str) -> str:
+    """AFLALO Dione Pant in Silk, Iris, front view on model  (max 125 chars).
 
+    `products` = every (title, colour) whose page shows this photo file. Alt text belongs to the file, so a look
+    photo on two pages names both: 'AFLALO Artusi Sweater in Wool, Black, and Shay Trouser in Wool, Moss, …'.
+    """
+    head = "AFLALO " + ", and ".join(f"{t}, {c}" if c else t for t, c in _pieces(products))
+    tail = ", " + _ALT_VIEW[view]
+    if len(head + tail) > 125:
+        head = head[:125 - len(tail)].rsplit(" ", 1)[0].rstrip(" ,.-–")
+    return head + tail
+
+
+def build_filename(products: list[tuple[str, str]], view: str, index: int, ext: str) -> str:
+    """aflalo-dione-pant-silk-iris-front-05.jpg
+
+    A photo on several pages names each product without its material, to stay short:
+    aflalo-artusi-sweater-black-shay-trouser-moss-model-front-02.jpg.
     `index` is the image's position on the product so two shots with the same view stay unique.
     """
     ext = ext.lower().lstrip(".")
     if ext == "jpeg":
         ext = "jpg"
-    parts = [_pascal(product_name(title)), _pascal(color), _pascal(view), f"{int(index):02d}"]
-    return "_".join(p for p in parts if p) + f".{ext}"
+    pieces = _pieces(products)
+    words = ["aflalo"]
+    for title, color in pieces:
+        words += [w for w in _slug_words(title if len(pieces) == 1 else product_name(title)) if w != "in"]
+        words += _slug_words(color)
+    return "-".join(words + [_FILE_VIEW[view], f"{int(index):02d}"]) + f".{ext}"
 
 
-_VIEW_TOKENS = "|".join(_pascal(v) for v in VIEWS)
+_VIEW_TOKENS = "|".join(_FILE_VIEW.values())
 _EXT_TOKENS = "|".join(_IMAGE_EXTS)
-_STANDARD_RE = re.compile(rf"^[A-Za-z0-9]+_[A-Za-z0-9]+_({_VIEW_TOKENS})_\d{{2}}\.({_EXT_TOKENS})$")
-_STANDARD_NO_COLOR_RE = re.compile(rf"^[A-Za-z0-9]+_({_VIEW_TOKENS})_\d{{2}}\.({_EXT_TOKENS})$")
+_STANDARD_RE = re.compile(rf"^aflalo(-[a-z0-9]+)+-({_VIEW_TOKENS})-\d{{2}}\.({_EXT_TOKENS})$")
 
 
 def is_standard_filename(filename: str) -> bool:
-    return bool(_STANDARD_RE.match(filename) or _STANDARD_NO_COLOR_RE.match(filename))
+    return bool(_STANDARD_RE.match(filename))
+
+
+def view_from_alt(alt: str) -> str | None:
+    """The view a standard alt text ends with ('…, back view on model' -> 'Model Back'), else None."""
+    if not (alt or "").startswith("AFLALO "):
+        return None
+    return next((v for v, phrase in _ALT_VIEW.items() if alt.endswith(", " + phrase)), None)
 
 
 def is_standard_alt(alt: str) -> bool:
-    return bool(alt) and alt.startswith("AFLALO ") and any(alt.endswith(f"- {v}") for v in VIEWS)
+    return view_from_alt(alt) is not None
 
 
 def basename_from_url(url: str) -> str:
