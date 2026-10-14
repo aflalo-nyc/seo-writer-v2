@@ -7,6 +7,7 @@ import logging
 import re
 import threading
 import secrets
+import time
 import urllib.parse
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -21,7 +22,7 @@ from config import (
 )
 import shopify_client as sh
 from ai_client import classify_view, generate_seo
-from naming import build_alt, build_filename, extension_from_url, is_standard_alt, is_standard_filename, product_color
+from naming import build_alt, build_filename, extension_from_url, is_standard_filename, product_color, view_from_alt
 from store import store
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -69,6 +70,34 @@ def _upsert_cached(product: dict) -> None:
                 prods[i] = product
                 return
         prods.append(product)
+
+
+_owners: dict = {"at": 0.0, "index": {}}
+
+
+def _file_owners(fresh: bool = False) -> dict[str, list[int]]:
+    """{photo file name -> ids of the products showing it}, refetched every 5 minutes, or after 30 s when a
+    photo turns up that the index doesn't have yet."""
+    with _lock:
+        age = time.time() - _owners["at"]
+        if age > 300 or (fresh and age > 30):
+            _owners.update(at=time.time(), index=sh.get_file_owners())
+        return _owners["index"]
+
+
+def _photo_products(product: dict, img: dict) -> list[tuple[str, str]]:
+    """Every active product whose page shows this photo, as (title, colour); a photo only on drafts names its own.
+
+    Alt text belongs to the file, so this is the same list from each page the photo is on: otherwise two
+    products' webhooks would keep rewriting each other's alt. Drafts are left out so a look photo never names an
+    unreleased style.
+    """
+    owners = _file_owners().get(img["filename"], [])
+    if product["id"] not in owners:
+        owners = _file_owners(fresh=True).get(img["filename"], [])
+    pages = [product] + [_find(pid) for pid in owners if pid != product["id"]]
+    live = [p for p in pages if p and p.get("status") == "active"]
+    return [(p["title"], _color(p)) for p in live or [product]]
 
 
 def _tags(p: dict) -> list[str]:
@@ -121,11 +150,16 @@ def _references_for(product: dict, n: int = 4) -> list[dict]:
 
 def _generate_for(product: dict) -> dict:
     return generate_seo(product["title"], product.get("body_html", ""), product.get("tags", ""), product.get("handle", ""),
-                        references=_references_for(product))
+                        references=_references_for(product), color=_color(product))
 
 
-def _photo_needs_work(img: dict) -> bool:
-    return not (is_standard_alt(img.get("alt", "")) and is_standard_filename(img.get("filename", "")))
+def _photo_needs_work(product: dict, img: dict) -> bool:
+    """Untagged, tagged for the wrong set of products, or a new upload whose file name isn't standard yet.
+    Live photos keep their names (see sh.rename_product_image), so only new uploads count a file name against them."""
+    view = view_from_alt(img.get("alt", ""))
+    if not view or img["alt"] != build_alt(_photo_products(product, img), view):
+        return True
+    return _is_recent_upload(img) and not is_standard_filename(img.get("filename", ""))
 
 
 def _color(product: dict) -> str:
@@ -133,13 +167,14 @@ def _color(product: dict) -> str:
 
 
 def _photo_proposal(product: dict, img: dict) -> dict:
-    view = classify_view(img["src"], product["title"])
-    color = _color(product)
-    return {
-        "view": view,
-        "alt": build_alt(product["title"], color, view),
-        "filename": build_filename(product["title"], color, view, img["position"], extension_from_url(img["src"])),
-    }
+    """Alt text for the photo and, for a new upload, its file name. A photo already tagged keeps its view, so
+    re-tagging it (say, once a second product shares it) needs no new look at the picture."""
+    view = view_from_alt(img.get("alt", "")) or classify_view(img["src"], product["title"])
+    products = _photo_products(product, img)
+    filename = img["filename"]
+    if _is_recent_upload(img):
+        filename = build_filename(products, view, img["position"], extension_from_url(img["src"]))
+    return {"view": view, "alt": build_alt(products, view), "filename": filename}
 
 
 def _product_json(p: dict) -> dict:
@@ -150,8 +185,8 @@ def _product_json(p: dict) -> dict:
     }
 
 
-def _image_json(img: dict) -> dict:
-    return {**img, "needs_work": _photo_needs_work(img)}
+def _image_json(product: dict, img: dict) -> dict:
+    return {**img, "needs_work": _photo_needs_work(product, img)}
 
 
 # ----------------------------------------------------------------------------- auth
@@ -372,9 +407,9 @@ def photos(cat: str):
         out.append({
             "id": p["id"], "title": p["title"], "handle": p["handle"],
             "color": _color(p),
-            "images": [_image_json(img) for img in p.get("images", [])],
+            "images": [_image_json(p, img) for img in p.get("images", [])],
         })
-    missing = sum(1 for p in products for img in p.get("images", []) if _photo_needs_work(img))
+    missing = sum(1 for p in products for img in p.get("images", []) if _photo_needs_work(p, img))
     return jsonify({"products": out, "missing": missing})
 
 
@@ -400,7 +435,7 @@ def photos_propose_category():
     products = _category_products(request.json["category"])
     _ensure_images(products)
     overwrite = request.json.get("overwrite", False)
-    targets = [(p, img) for p in products for img in p.get("images", []) if overwrite or _photo_needs_work(img)]
+    targets = [(p, img) for p in products for img in p.get("images", []) if overwrite or _photo_needs_work(p, img)]
     results = {}
     with ThreadPoolExecutor(max_workers=GEN_WORKERS) as ex:
         futures = {ex.submit(_photo_proposal, p, img): (p, img) for p, img in targets}
@@ -422,9 +457,9 @@ def _apply_photo(product: dict, img: dict, alt: str, filename: str | None, renam
     img["alt"] = alt
     if rename and filename and filename != img.get("filename"):
         try:
-            sh.rename_product_image(product["id"], img["src"], filename)
-            img["filename"] = filename
-            result["renamed"] = True
+            if sh.rename_product_image(product["id"], img["src"], filename, AUTO_TAG_MAX_AGE_HOURS):
+                img["filename"] = filename
+                result["renamed"] = True
         except Exception as e:
             result["rename_error"] = str(e)
     return result
@@ -579,30 +614,39 @@ def _process_photos(product: dict, recent_only: bool = False) -> None:
     """Tag (alt text) and rename photos that don't follow the convention yet.
 
     A brand-new product gets all its photos tagged. On an update event only recently uploaded photos
-    are touched, so re-saving an old product does not silently rewrite its whole gallery.
+    are touched, so re-saving an old product does not silently rewrite its whole gallery. The exception is a
+    photo already tagged here whose products changed (a look photo added to a second page): its alt text is
+    redone from the view it already names, with no new look at the picture and no rename.
     """
     images = sh.get_product_images(product["id"])
     product["images"] = images
-    targets = [img for img in images if _photo_needs_work(img) and not store.is_media_processed(img["id"])
-               and (not recent_only or _is_recent_upload(img))]
-    if not targets:
+    retag, untagged = [], []
+    for img in images:
+        view = view_from_alt(img["alt"])
+        if view:
+            if img["alt"] != build_alt(_photo_products(product, img), view):
+                retag.append(img)
+        elif not store.is_media_processed(img["id"]) and (not recent_only or _is_recent_upload(img)):
+            untagged.append(img)
+    if not retag and not untagged:
         return
     if not AUTO_APPLY_PHOTOS:
-        store.log("photos_waiting", product_id=product["id"], title=product["title"], count=len(targets),
+        store.log("photos_waiting", product_id=product["id"], title=product["title"], count=len(retag) + len(untagged),
                   reason="AUTO_APPLY_PHOTOS is off; use the Photos tab")
         return
-    for img in targets:
-        # Mark first: our own alt/rename writes trigger another products/update webhook.
-        store.mark_media_processed(img["id"])
+    for img in retag + untagged:
+        new = img in untagged
+        if new:
+            # Mark first: our own alt/rename writes trigger another products/update webhook.
+            store.mark_media_processed(img["id"])
         try:
             prop = _photo_proposal(product, img)
-            res = _apply_photo(product, img, prop["alt"], prop["filename"], rename=not is_standard_filename(img["filename"]))
+            res = _apply_photo(product, img, prop["alt"], prop["filename"], rename=new and not is_standard_filename(img["filename"]))
             store.log("photo_tagged", product_id=product["id"], title=product["title"], image_id=img["id"], view=prop["view"],
                       alt=prop["alt"], filename=img["filename"], renamed=res["renamed"], error=res["rename_error"], source="webhook")
         except Exception as e:
             logger.exception("Photo tagging failed for %s image %s", product["title"], img["id"])
             store.log("error", product_id=product["id"], title=product["title"], image_id=img["id"], where="photo tagging", error=str(e))
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, debug=True, threaded=True)

@@ -5,6 +5,7 @@ Image alt text uses the REST product-images endpoint, which works with the app's
 `write_products` permission. Renaming a photo's file uses GraphQL `fileUpdate`, which needs
 the `write_files` permission (see README).
 """
+import datetime
 import logging
 import time
 import requests
@@ -154,6 +155,21 @@ def attach_images(products: list[dict]) -> None:
             f.result()
 
 
+def get_file_owners() -> dict[str, list[int]]:
+    """{photo file name -> ids of every product showing it}. A look photo can sit on several product pages
+    (30 on the site, 2026-10-14), and its alt text and file name are one value for all of them."""
+    owners: dict[str, list[int]] = {}
+    url, params = f"{BASE_URL}/products.json", {"limit": 250, "fields": "id,images"}
+    while url:
+        resp = requests.get(url, headers=_headers(), params=params, timeout=30)
+        resp.raise_for_status()
+        for p in resp.json().get("products", []):
+            for img in p.get("images") or []:
+                owners.setdefault(basename_from_url(img["src"]), []).append(p["id"])
+        url, params = resp.links.get("next", {}).get("url"), None
+    return owners
+
+
 def set_image_alt(product_id: int, image_id: int, alt_text: str) -> None:
     requests.put(
         f"{BASE_URL}/products/{product_id}/images/{image_id}.json",
@@ -164,17 +180,17 @@ def set_image_alt(product_id: int, image_id: int, alt_text: str) -> None:
 
 # ---------------------------------------------------------------- file renames (GraphQL, needs write_files)
 
-def get_media_by_filename(product_id: int) -> dict[str, str]:
-    """{current file name -> MediaImage gid} for a product's photos."""
+def get_media_by_filename(product_id: int) -> dict[str, dict]:
+    """{current file name -> {"id": MediaImage gid, "created_at": when the file was uploaded}} for a product's photos."""
     data = gql(
-        """query($id: ID!) { product(id: $id) { media(first: 100) { nodes { id ... on MediaImage { image { url } } } } } }""",
+        """query($id: ID!) { product(id: $id) { media(first: 100) { nodes { id ... on MediaImage { createdAt image { url } } } } } }""",
         {"id": product_gid(product_id)},
     )
     out = {}
     for m in (data.get("product") or {}).get("media", {}).get("nodes", []):
         url = (m.get("image") or {}).get("url")
         if url:
-            out[basename_from_url(url)] = m["id"]
+            out[basename_from_url(url)] = {"id": m["id"], "created_at": m.get("createdAt")}
     return out
 
 
@@ -193,12 +209,21 @@ def rename_file(media_gid: str, filename: str) -> None:
     logger.info("Renamed %s -> %s", media_gid, filename)
 
 
-def rename_product_image(product_id: int, current_src: str, new_filename: str) -> None:
-    media = get_media_by_filename(product_id)
-    gid = media.get(basename_from_url(current_src))
-    if not gid:
+def rename_product_image(product_id: int, current_src: str, new_filename: str, max_age_hours: int) -> bool:
+    """Rename a photo's file, unless it was uploaded more than `max_age_hours` ago. True if renamed.
+
+    A rename ends the file's old URL and Shopify doesn't redirect it, so a live photo would drop out of
+    Google Images for months; live photos keep their names and get alt text only.
+    """
+    media = get_media_by_filename(product_id).get(basename_from_url(current_src))
+    if not media:
         raise ShopifyError(f"Could not find media for {basename_from_url(current_src)} on product {product_id}")
-    rename_file(gid, new_filename)
+    uploaded = datetime.datetime.fromisoformat((media["created_at"] or "1970-01-01T00:00:00Z").replace("Z", "+00:00"))
+    if datetime.datetime.now(datetime.timezone.utc) - uploaded > datetime.timedelta(hours=max_age_hours):
+        logger.info("Kept the name of %s: uploaded %s, already live", basename_from_url(current_src), media["created_at"])
+        return False
+    rename_file(media["id"], new_filename)
+    return True
 
 
 # ---------------------------------------------------------------- setup helpers

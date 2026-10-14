@@ -10,9 +10,17 @@ file names for products on the Aflalo Shopify store. Runs as a small Flask app.
 | Area | Manual (in the app) | Automatic (Shopify webhooks) |
 |---|---|---|
 | SEO copy | **SEO** tab: Generate missing → tick → Publish approved. Writes straight into the product's *Search engine listing* in Shopify. | When a style is created in Shopify, copy is written using live same-category examples as reference and parked in the **Approval queue**. Merch approves → it goes live. Nothing is published without approval. |
-| Photos | **Photos** tab: Generate → review alt text + file name → Apply approved. | When a photo is added to a product, it is classified (Model Front / Ghost Back / Detail …), given alt text `AFLALO <Title> – <Color> - <View>` and renamed `ProductName_Color_View_NN.ext`. |
+| Photos | **Photos** tab: Generate → review alt text + file name → Apply approved. | When a photo is added to a product, it is classified (Model Front / Ghost Back / Detail …), given alt text `AFLALO <Title>, <Color>, <view>` (`AFLALO Dione Pant in Silk, Iris, front view on model`) and renamed `aflalo-<title>-<color>-<view>-NN.ext` (`aflalo-dione-pant-silk-iris-model-front-01.jpg`). |
 
-The naming convention lives in one file: `naming.py`.
+The naming convention lives in one file: `naming.py`. Three rules sit behind it:
+
+- **Only new uploads are renamed.** A photo uploaded more than `AUTO_TAG_MAX_AGE_HOURS` ago keeps its file name and
+  gets alt text only: renaming a file in Shopify ends its old URL (no redirect), and Google takes months to find an
+  image again.
+- **A look photo names every product it is on.** Alt text and file name belong to the file, and a file can sit on
+  several product pages (30 on the site, 2026-10-14). Its alt text names each active product sharing it, in title
+  order, so it reads the same from every page; drafts are never named.
+- **The colour is the store's** (the product's Color option), and is left out when the title already says it.
 
 ## Run on your laptop
 

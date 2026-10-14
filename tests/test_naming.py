@@ -1,6 +1,6 @@
 from naming import (
     product_name, material, color_from_handle, product_color, build_alt, build_filename,
-    is_standard_filename, is_standard_alt, normalize_view, basename_from_url,
+    is_standard_filename, is_standard_alt, normalize_view, basename_from_url, view_from_alt,
 )
 
 
@@ -19,22 +19,43 @@ def test_color_from_handle():
 
 
 def test_build_alt():
-    alt = build_alt("Alune Dress in Wool Silk", "Citron", "Ghost Front")
-    assert alt == "AFLALO Alune Dress in Wool Silk – Citron - Ghost Front"
+    alt = build_alt([("Dione Pant in Silk", "Iris")], "Model Side")
+    assert alt == "AFLALO Dione Pant in Silk, Iris, side view on model"
     assert is_standard_alt(alt)
+    assert view_from_alt(alt) == "Model Side"
+    assert build_alt([("Dione Pant in Silk", "Iris")], "Ghost Front") == "AFLALO Dione Pant in Silk, Iris, front view"
     assert not is_standard_alt("Alune Dress in Wool Silk - AFLALO")
-    assert len(build_alt("X" * 200, "Citron", "Ghost Front")) <= 125
+    assert not is_standard_alt("AFLALO Alune Dress in Wool Silk – Citron - Ghost Front")  # the old format is redone
+
+
+def test_alt_leaves_out_a_colour_the_title_already_says():
+    assert build_alt([("Turquoise Choker in White Gold", "Turquoise")], "Model Detail") == \
+        "AFLALO Turquoise Choker in White Gold, close-up on model"
+
+
+def test_a_shared_photo_names_every_product_the_same_way_from_each_page():
+    artusi, shay = ("Artusi Sweater in Wool", "Black"), ("Shay Trouser in Wool", "Moss")
+    alt = build_alt([shay, artusi], "Model Front")
+    assert alt == "AFLALO Artusi Sweater in Wool, Black, and Shay Trouser in Wool, Moss, front view on model"
+    assert build_alt([artusi, shay], "Model Front") == alt
+    assert build_filename([shay, artusi], "Model Front", 2, "jpg") == "aflalo-artusi-sweater-black-shay-trouser-moss-model-front-02.jpg"
+
+
+def test_a_long_alt_is_cut_before_the_view():
+    alt = build_alt([("X" * 60 + " Dress in Silk", "Citron"), ("Y" * 60 + " Coat in Wool", "Black")], "Model Back")
+    assert len(alt) <= 125
+    assert view_from_alt(alt) == "Model Back"
 
 
 def test_build_filename_and_standard_check():
-    fn = build_filename("Herve Sweater in Cashmere", "Black", "Model Front", 1, "webp")
-    assert fn == "HerveSweater_Black_ModelFront_01.webp"
+    fn = build_filename([("Herve Sweater in Cashmere", "Black")], "Model Front", 1, "webp")
+    assert fn == "aflalo-herve-sweater-cashmere-black-model-front-01.webp"
     assert is_standard_filename(fn)
-    fn2 = build_filename("Brontë Jean in Rigid Denim", "", "Ghost Back", 12, "JPEG")
-    assert fn2 == "BronteJean_GhostBack_12.jpg"
+    fn2 = build_filename([("Brontë Jean in Rigid Denim", "")], "Ghost Back", 12, "JPEG")
+    assert fn2 == "aflalo-bronte-jean-rigid-denim-back-12.jpg"
     assert is_standard_filename(fn2)
     assert not is_standard_filename("250812_JI_AFLALO_SHOT_07_092_4511e199.webp")
-    assert not is_standard_filename("AdrianShirt_WineTartan_FRONT_1.webp")
+    assert not is_standard_filename("HerveSweater_Black_ModelFront_01.webp")  # the old format: underscores, joined words
 
 
 def test_normalize_view():
